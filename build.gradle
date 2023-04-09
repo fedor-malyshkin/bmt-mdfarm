@@ -1,0 +1,223 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+
+}
+
+plugins {
+    id 'org.springframework.boot' version '2.7.10'
+    id 'io.spring.dependency-management' version '1.1.0'
+    id 'java'
+    id 'groovy'
+    id 'nu.studer.jooq' version '7.2'
+}
+
+
+ext {
+    LOMBOK_VERSION = '1.18.24'
+
+    MAPSTRUCT_VERSION = '1.5.3.Final'
+    LOMBOK_MAPSTRUCT_BINDING_VERSION = '0.2.0'
+
+    SPRINGDOC_VER = '1.6.12'
+
+    FUNCTIONALJAVA_VERSION = '5.0'
+    RESILIENCE4J_VERSION = '1.7.1'
+
+    JSOUP_VERSION = '1.15.4'
+
+    // DB - related
+    H2DB_VERSION = '2.1.214'
+    FLYWAY_VERSION = '9.4.0'
+    JOOQ_VERSION = '3.17.5'
+
+// logging
+    SLF4J_VERSION = '1.7.36' // spring uses not a service discovery - but direct calls
+    LOGBACK_VERSION = '1.2.11' // compatible with current SLF4J version
+
+// test
+    TEST_SPOCK_VERSION = '2.3-groovy-4.0'
+    TEST_GROOVY_VERSION = '4.0.6'
+}
+
+ext['rest-assured.version'] = '5.2.0'
+
+jar {
+    enabled = false
+}
+bootJar {
+    archiveFileName = "${project.name}.jar"
+}
+
+
+group = 'test.bmt'
+sourceCompatibility = '17'
+targetCompatibility = '17'
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+dependencies {
+    // Spring
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // functional
+    implementation "org.functionaljava:functionaljava:${FUNCTIONALJAVA_VERSION}"
+
+    // resilience4j
+    implementation "io.github.resilience4j:resilience4j-retry:${RESILIENCE4J_VERSION}"
+
+    // Instrumentation
+    implementation 'org.projectlombok:lombok'
+
+    // DB + Migration
+    implementation "com.h2database:h2:${H2DB_VERSION}"
+    implementation "org.flywaydb:flyway-core:${FLYWAY_VERSION}"
+
+    // JOOQ SQL generation
+    implementation "org.jooq:jooq:${JOOQ_VERSION}"
+    // for code-generation only
+    jooqGenerator "jakarta.xml.bind:jakarta.xml.bind-api:4.0.0"
+    jooqGenerator "org.jooq:jooq-meta-extensions:3.16.12"
+
+    // openAPI
+    implementation "org.springdoc:springdoc-openapi-ui:${SPRINGDOC_VER}"
+    implementation "org.springdoc:springdoc-openapi-data-rest:${SPRINGDOC_VER}"
+
+    // mapping
+    implementation "org.mapstruct:mapstruct:${MAPSTRUCT_VERSION}"
+
+    // Logging
+    implementation "org.slf4j:slf4j-api:${SLF4J_VERSION}"
+    implementation "ch.qos.logback:logback-classic:${LOGBACK_VERSION}"
+
+    // https://mvnrepository.com/artifact/org.jsoup/jsoup
+    implementation "org.jsoup:jsoup:${JSOUP_VERSION}"
+
+
+    // annotation processors (THE ORDER IS IMPORTANT!!!)
+    annotationProcessor(
+            "org.projectlombok:lombok-mapstruct-binding:${LOMBOK_MAPSTRUCT_BINDING_VERSION}",
+            'org.projectlombok:lombok',
+            "org.mapstruct:mapstruct-processor:${MAPSTRUCT_VERSION}"
+    )
+
+    // test
+    testImplementation "org.apache.groovy:groovy-all:${TEST_GROOVY_VERSION}"
+    testImplementation("io.rest-assured:rest-assured") {
+        exclude group: 'org.apache.groovy', module: 'groovy-xml'
+        exclude group: 'org.apache.groovy', module: 'groovy'
+    }
+    testImplementation platform("org.spockframework:spock-bom:${TEST_SPOCK_VERSION}")
+    testImplementation "org.spockframework:spock-core"
+    testImplementation "org.spockframework:spock-spring"
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+
+    // Instrumentation
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+}
+
+
+test {
+    // we work in UTC TZ to handle all time uniformly
+    systemProperty "user.timezone", "UTC"
+    filter {
+        includeTestsMatching "*IT"
+        includeTestsMatching "*Test"
+    }
+    useJUnitPlatform()
+}
+
+jooq {
+    version = JOOQ_VERSION
+
+    configurations {
+        main {  // name of the jOOQ configuration
+            generationTool {
+                logging = org.jooq.meta.jaxb.Logging.WARN
+                generator {
+                    name = 'org.jooq.codegen.JavaGenerator'
+                    database {
+                        name = "org.jooq.meta.extensions.ddl.DDLDatabase"
+                        properties {
+                            property {
+                                key = "scripts"
+                                value = "src/main/resources/db/h2/migration/*.sql"
+                            }
+                            property {
+                                key = "sort"
+                                value = "flyway"
+                            }
+                            // The default name case for unquoted objects:
+                            //
+                            // - as_is: unquoted object names are kept unquoted
+                            // - upper: unquoted object names are turned into upper case (most databases)
+                            // - lower: unquoted object names are turned into lower case (e.g. PostgreSQL)
+                            property {
+                                key = 'defaultNameCase'
+                                value = 'lower'
+                            }
+                        }
+                        forcedTypes {
+                            forcedType {
+                                name = 'INSTANT'
+                                includeExpression = '.*\\.CREATED_AT|.*\\.UPDATED_AT'
+                            }
+                        }
+                    }
+                    generate {
+                        // https://www.jooq.org/doc/3.17/manual-single-page/#codegen-implicit-join-paths
+                        implicitJoinPathsToOne = false
+
+                        deprecated = false
+                        records = true
+                        pojos = true
+                        immutablePojos = false // it's nice to have it - but they don't provide convinient constructor
+                        // with own generator only
+
+
+                        fluentSetters = true
+                        javaTimeTypes = true
+                        sequences = false
+                        indexes = false
+                        // annotations
+                        generatedAnnotation = true
+                        generatedAnnotationType = 'DETECT_FROM_JDK'
+                        generatedAnnotationDate = true
+                        nonnullAnnotation = true
+                        nonnullAnnotationType = 'lombok.NonNull'
+                        validationAnnotations = false
+
+                        constructorPropertiesAnnotation = true
+                        constructorPropertiesAnnotationOnPojos = true
+                        constructorPropertiesAnnotationOnRecords = true
+                    }
+                    target {
+                        directory = 'build/generated/sources/jooq/main'
+                        packageName = 'test.bmk.mdfarm.model.persistence.jooq'
+                    }
+                    strategy.name = 'org.jooq.codegen.DefaultGeneratorStrategy'
+                }
+            }
+        }
+    }
+}
+
+// configure jOOQ task such that it only executes when something has changed that potentially affects the generated JOOQ sources
+tasks.named('generateJooq').configure {
+    // declare Flyway migration scripts as inputs on the jOOQ task
+    inputs.files(fileTree('src/main/resources/db/h2/migration'))
+            .withPropertyName('migrations')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // make jOOQ task participate in incremental builds (and build caching)
+    allInputsDeclared = true
+}
+
+

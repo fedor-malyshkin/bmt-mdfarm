@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: set-up-jdk
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'liberica' # See 'Supported distributions' for available options
+          java-version: '17' # The JDK version to make available on the path.
+          java-package: jdk # (jre, jdk, or jdk+fx) - defaults to jdk
+          architecture: x64 # (x64 or x86) - defaults to x64
+      - name: cache-local-repository
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      - name: grant-execute-permission-for-gradlew
+        run: chmod +x gradlew
+      - name: build-with-gradle
+        run: ./gradlew build
+      - name: run-tests
+        run: ./gradlew test

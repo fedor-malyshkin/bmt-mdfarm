@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>[%date{ISO8601}] [%-5level] [%-35.35logger{35}] [%-20.20thread] - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- General logging -->
+    <variable scope="system" name="loggingLevelRoot" value="${env.logging.root:-INFO}" />
+    <root level="${loggingLevelRoot}">
+        <appender-ref ref="STDOUT"/>
+    </root>
+
+    <!-- API Service logging -->
+    <logger name="test.bmt.mdfarm" level="${env.logging.api-service:-INFO}" />
+
+
+</configuration>
